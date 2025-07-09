@@ -9,6 +9,8 @@ import cv2
 from PIL import Image
 from sklearn.cluster import KMeans
 from tqdm import tqdm
+from dotenv import load_dotenv
+load_dotenv()
 
 import torch
 from transformers import BlipProcessor, BlipForConditionalGeneration
@@ -97,7 +99,7 @@ for product in tqdm(products_data, desc="Processing products"):
         "all_combined_tags": list(set(caption_tags + yolo_tags + filtered_tags))
     })
     enriched.append(product)
-    print(product("product_id"))
+    print(product["product_id"])
 
     with open(CHECKPOINT_FILE, "a") as ckpt:
         ckpt.write(product["product_id"] + "\n")

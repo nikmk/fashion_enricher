@@ -8,4 +8,5 @@ Pillow
 tqdm
 google-cloud-storage
 matplotlib
+dotenv
 git+https://github.com/openai/CLIP.git
