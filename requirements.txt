@@ -1,0 +1,11 @@
+transformers
+torch
+torchvision
+ultralytics
+opencv-python
+scikit-learn
+Pillow
+tqdm
+google-cloud-storage
+matplotlib
+git+https://github.com/openai/CLIP.git
