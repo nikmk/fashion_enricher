@@ -18,6 +18,7 @@ from ultralytics import YOLO
 import clip
 
 from google.cloud import storage
+from google.api_core.exceptions import GoogleAPIError
 
 from utils.tags import style_tag_bank, text_prompts, tag_to_category, extract_tags, adaptive_clip_filter
 
@@ -25,7 +26,6 @@ logging.basicConfig(level=logging.INFO, format='[%(levelname)s] %(message)s')
 
 GCS_BUCKET_NAME = os.getenv("GCS_BUCKET_NAME")
 INPUT_JSON_NAME = os.getenv("INPUT_JSON_NAME", "products.json")
-OUTPUT_JSON_NAME = os.getenv("OUTPUT_JSON_NAME", "products_enriched.json")
 CHECKPOINT_FILE = "checkpoint.txt"
 
 storage_client = storage.Client()
@@ -45,7 +45,21 @@ yolo_model = YOLO("yolov8n.pt")
 clip_model, clip_preprocess = clip.load("ViT-B/32")
 clip_model.eval()
 
-enriched = []
+enriched_batch = []
+batch_size = 25
+batch_count = 0
+
+def upload_batch(batch, count):
+    batch_blob_name = f"products_enriched_batch_{count}.json"
+    for attempt in range(3):
+        try:
+            bucket.blob(batch_blob_name).upload_from_string(json.dumps(batch, indent=2), content_type="application/json")
+            logging.info(f"✅ Uploaded batch {count} to GCS as {batch_blob_name}")
+            return True
+        except GoogleAPIError as e:
+            logging.warning(f"Retry {attempt + 1}/3 failed to upload batch {count}: {e}")
+    logging.error(f"❌ Failed to upload batch {count} after 3 retries")
+    return False
 
 for product in tqdm(products_data, desc="Processing products"):
     image_url = product.get("main_image")
@@ -106,19 +120,18 @@ for product in tqdm(products_data, desc="Processing products"):
         "dominant_colors_rgb": dominant_colors,
         "all_combined_tags": list(set(caption_tags + yolo_tags + filtered_tags))
     })
-    enriched.append(product)
+    enriched_batch.append(product)
     print(product["product_id"])
 
     with open(CHECKPOINT_FILE, "a") as ckpt:
         ckpt.write(product["product_id"] + "\n")
 
+    if len(enriched_batch) >= batch_size:
+        success = upload_batch(enriched_batch, batch_count)
+        if success:
+            enriched_batch = []
+            batch_count += 1
 
-# Batch upload enriched products to GCS in batches of 25
-batch_size = 25
-batch_count = 0
-for i in range(0, len(enriched), batch_size):
-    batch = enriched[i:i + batch_size]
-    batch_blob_name = f"products_enriched_batch_{batch_count}.json"
-    bucket.blob(batch_blob_name).upload_from_string(json.dumps(batch, indent=2), content_type="application/json")
-    logging.info(f"✅ Uploaded batch {batch_count} to GCS as {batch_blob_name}")
-    batch_count += 1
+# Upload any remaining products
+if enriched_batch:
+    upload_batch(enriched_batch, batch_count)
