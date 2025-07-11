@@ -49,7 +49,15 @@ enriched = []
 
 for product in tqdm(products_data, desc="Processing products"):
     image_url = product.get("main_image")
-    if not image_url or product.get("product_id") in processed:
+    if not product.get("product_id"):
+        import uuid
+        product["product_id"] = str(uuid.uuid4())
+        logging.info(f"Generated product_id for {product.get('product_name')}: {product['product_id']}")
+    if not image_url:
+        logging.info(f"Skipping product {product.get('product_name')} - No image URL.")
+        continue
+    if product.get("yolo_tags"):
+        logging.info(f"Skipping product {product.get('product_name')} - YOLO tags already exist.")
         continue
 
     try:
@@ -104,5 +112,13 @@ for product in tqdm(products_data, desc="Processing products"):
     with open(CHECKPOINT_FILE, "a") as ckpt:
         ckpt.write(product["product_id"] + "\n")
 
-bucket.blob(OUTPUT_JSON_NAME).upload_from_string(json.dumps(enriched, indent=2), content_type="application/json")
-logging.info("✅ Enriched products uploaded to GCS.")
+
+# Batch upload enriched products to GCS in batches of 25
+batch_size = 25
+batch_count = 0
+for i in range(0, len(enriched), batch_size):
+    batch = enriched[i:i + batch_size]
+    batch_blob_name = f"products_enriched_batch_{batch_count}.json"
+    bucket.blob(batch_blob_name).upload_from_string(json.dumps(batch, indent=2), content_type="application/json")
+    logging.info(f"✅ Uploaded batch {batch_count} to GCS as {batch_blob_name}")
+    batch_count += 1
