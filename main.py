@@ -111,8 +111,10 @@ for product in tqdm(products_data, desc="Processing products"):
     kmeans = KMeans(n_clusters=3, random_state=42)
     kmeans.fit(img_reshape)
     dominant_colors = [tuple(map(int, color)) for color in kmeans.cluster_centers_]
+    product_id = product["product_id"]
 
     product.update({
+        "product_id": product_id,
         "caption": caption,
         "caption_tags": caption_tags,
         "yolo_tags": yolo_tags,
